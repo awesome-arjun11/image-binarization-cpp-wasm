@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Otsu binarization demo</title>
+
+    <style>
+        input {
+            display:none;
+        }
+
+        label {
+            width: 100%;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-left: auto;
+            margin-right: auto;
+            padding: 1rem;
+            border-radius: 1rem;
+            background: #0f0c29;  /* fallback for old browsers */
+            background: -webkit-linear-gradient(to right, #24243e, #302b63, #0f0c29);  /* Chrome 10-25, Safari 5.1-6 */
+            background: linear-gradient(to right, #24243e, #302b63, #0f0c29); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+            color: white;
+            font-family: sans-serif;
+            transition: all .5s;
+            box-shadow: 1px 1px 15px 3px gray;
+        }
+
+        label:hover {
+            cursor: pointer;
+            transform: scale(1.1);
+        }
+
+        :root {
+            height:100%;
+        }
+
+        body {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            flex-direction: column;
+        }
+    </style>
+</head>
+<body>
+    <div style="position:relative; top:2em;">
+        <label for="pic">
+            <span>Click To Upload Image</span>
+            <input type="file" id="pic" onchange="document.getElementById('img').src = window.URL.createObjectURL(this.files[0]);">
+        </label>
+    </div>
+    <h3 style="position: relative;top:2em">Otsu Binarization: </h3>
+    <div style="display: flex;max-width: 100vw;top:2em;position:relative;">
+        <img id="img" alt="image" style="max-width:49vw" accept="image/*" onload="onImageLoad(this);">
+        <img id="binarized" style="max-width:49vw" alt="binarized image">
+    </div>
+      
+ <script>
+    const testImage = "testimg.jpg";
+    let onImageLoad = () => new Error("Not Implemented Yet");
+    let HEAPU8, wasmMemory;
+    let imports = {
+        env:{
+            'emscripten_notify_memory_growth': (memoryIndex) => {
+                if(wasmMemory)
+                    HEAPU8 = new Uint8Array(wasmMemory.buffer)
+            },
+        }
+    }
+
+    WebAssembly.instantiateStreaming(fetch('dist/img_processing.wasm'), imports)
+    .then(({ module, instance}) => {
+        const { otsuBinarize, free, malloc, memory } = instance.exports;
+        wasmMemory = memory;
+        HEAPU8 = new Uint8Array(wasmMemory.buffer);
+
+        onImageLoad = (imageElem) => {
+            const canvasElem = document.createElement('canvas');
+            // set height and width
+            canvasElem.height = imageElem.naturalHeight;
+            canvasElem.width = imageElem.naturalWidth;
+            // get context and drwa image on to canvas
+            const ctx = canvasElem.getContext('2d');
+            ctx.drawImage(imageElem, 0, 0);
+
+            // get ImageData object with length and RGBA values
+            const imageData = ctx.getImageData(0, 0, imageElem.naturalWidth, imageElem.naturalHeight);
+            let imgData = imageData.data;3
+
+            const len =  imgData.length;
+
+            // allocating memory to wasm
+            
+            const arrayMemory = malloc(len);
+            //let HEAPU8 = new Uint8Array(memory.buffer);
+            HEAPU8.set(imgData, arrayMemory); 
+
+            // execute binarize function on memory
+            otsuBinarize(arrayMemory, len);
+            //Module._greyscale(memory, len);
+
+            // get the binarized image data and free alocated memory
+            const binarizedImageData = HEAPU8.subarray(arrayMemory, arrayMemory + len);
+            free(arrayMemory);
+            const newctx = canvasElem.getContext('2d');
+            // make new image with binarized data
+            const newImageData = newctx.createImageData(imageElem.naturalWidth, imageElem.naturalHeight);
+            newImageData.data.set(binarizedImageData);
+            newctx.putImageData(newImageData, 0, 0);
+            document.getElementById('binarized').src = canvasElem.toDataURL();
+            
+        }        
+        document.getElementById('img').src = testImage;
+    });
+
+ </script>   
+</body>
+</html>

@@ -3,10 +3,10 @@
 #define BLUE_INTENCITY_COEF 0.0722F
 
 extern "C"{
-    void otsuBinarize ( unsigned char* data, int len );
+    void otsuBinarize ( unsigned char* data, unsigned int len );
 }
 
-void otsuBinarize ( unsigned char* data, int len ) {
+void otsuBinarize ( unsigned char* data, unsigned int len ) {
     // histogram and greyscale
     int histogram[256] = {0};
 
@@ -14,12 +14,13 @@ void otsuBinarize ( unsigned char* data, int len ) {
         int brightness =  ( data[i] * RED_INTENCITY_COEF ) + 
                             ( data[i + 1] * GREEN_INTENCITY_COEF ) +
                             ( data[i + 2] * BLUE_INTENCITY_COEF );
-        ++histogram[brightness];
+        histogram[brightness]++;
         data[i] = brightness;
     }
 
     // otsu binarization threshold calculation
 
+    unsigned int total = len / 4; // H x W; num of pixels
     int sum = 0;
     for( int i = 0; i < 256; ++i )
         sum += i * histogram[i];
@@ -33,19 +34,19 @@ void otsuBinarize ( unsigned char* data, int len ) {
     int threshold_2 = 0;
 
     for (int i = 0; i < 256; ++i) {
-        wB += histogram[i];            // Weight Background
+        wB += histogram[i];            // Weight-Background
         if (wB == 0) continue;
 
-        wF = len - wB;                 // Weight Foreground
+        wF = total - wB;                 // Weight-Foreground
         if (wF == 0) break;
 
         sumB += i * histogram[i];
 
-        int mB = sumB / wB;            // Mean Background
-        int mF = (sum - sumB) / wF;    // Mean Foreground
+        int mB = sumB / wB;            // Mean-Background
+        int mF = (sum - sumB) / wF;    // Mean-Foreground
 
         // Calculate Between Class Variance
-        float varBetween = (float)wB * (float)wF * (mB - mF) * (mB - mF);
+        float varBetween = 1.0F * wB * wF * (mB - mF) * (mB - mF);
 
         // Check if new maximum found
         if (varBetween >= varMax) {
@@ -55,8 +56,10 @@ void otsuBinarize ( unsigned char* data, int len ) {
         }
     }
 
+    // Calculated threshold
     int threshold = ( threshold_1 + threshold_2 ) / 2;
 
+    // binarization based on threshold value 
     for (int i = 0; i < len; i += 4) {
         int det = data[i] > threshold; 
         int val = ( det * 255 ) + ( det * 0 );
